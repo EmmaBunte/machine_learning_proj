@@ -1,0 +1,126 @@
+---
+title: "machine_learning"
+author: "Emma Bunte"
+date: "Monday, February 01, 2016"
+output: html_document
+---
+
+#Background
+As described on the course site:
+"Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset)."
+
+# Problem Description
+As described on the course site:
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases."
+
+
+# Initialisation
+Loading the necessary libraries:
+```{r}
+library(caret)
+library(reshape2)
+library(rpart)
+library(randomForest)
+```
+
+Setting the seed:
+```{r}
+set.seed(54321)
+```
+
+Loading the data:
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+csv_test <- read.csv(url(testUrl), na.strings=c("NA",""), header=TRUE)
+csv_train <- read.csv(url(trainUrl), na.strings=c("NA",""), header=TRUE)
+```
+
+# Creating test and training set
+Before we start creating our prediction, we partition our set into a training and a testing set.
+```{r}
+# create training set indexes with 60% of data
+inTrain <- createDataPartition(y=csv_train$classe,p=0.6, list=FALSE)
+# subset data to training
+training <- csv_train[inTrain,]
+# subset data (the rest) to test
+testing <- csv_train[-inTrain,]
+```
+
+# Cleaning Data Set
+Remove the data that has near zero variance:
+```{r}
+nzv <- nearZeroVar(training, saveMetrics=TRUE)
+training <- training[,nzv$nzv==FALSE]
+```
+
+Delete columns with more than 60% missing data:
+```{r}
+training2 <- training
+for(i in 1:length(training)) {
+    if( sum( is.na( training[, i] ) ) /nrow(training) >= .6) {
+        for(j in 1:length(training2)) {
+            if( length( grep(names(training[i]), names(training2)[j]) ) == 1)  {
+                training2 <- training2[ , -j]
+            }   
+        } 
+    }
+}
+training<-training2
+```
+
+Remove columns that are unnecessary for predicting, like name and timestamp:
+```{r}
+training<-training[,-(1:5)]
+```
+
+Remove the same data from the test set:
+```{r}
+clean1 <- colnames(training)
+clean2 <- colnames(training[, -54]) # remove classe column
+testing <- testing[clean1]
+csv_test <- csv_test[clean2]
+```
+
+
+# Prediction with Trees 
+First we fit the model:
+```{r}
+model_fit_rpart <- train(classe ~ ., data=training, method = "rpart")
+```
+
+Then we make the predictions on the test set we created:
+```{r}
+predictions_rpart <- predict(model_fit_rpart, newdata=testing)
+```
+
+Then we test the result using the confussion matrix
+```{r}
+confusionMatrix(predictions_rpart, testing$classe)
+```
+
+# Prediction with Random Forests
+First we fit the random forests model:
+```{r}
+model_fit_rf <- randomForest(classe ~. , data=training)
+```
+
+Then we make the predictions on the test set we created:
+```{r}
+predictions_rf <- predict(model_fit_rf, testing, type = "class")
+```
+
+Then we test the result using the confussion matrix
+```{r}
+confusionMatrix(predictions_rf, testing$classe)
+```
+
+# Model Selection
+The accuracy of the trees is 56% and the accuracy of the random forests model is 99.66%. Both these accuracy are computed on the test set. Since the out of sample error of the random forests model is so good, we will use this model to make the predictions.
+
+# Predicting Results on the Test Data
+Generating file for predictions on test set of the assignment:
+```{r}
+predictions_rf_test <- predict(model_fit_rf, csv_test, type = "class")
+predictions_rf_test
+```
